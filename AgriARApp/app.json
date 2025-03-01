@@ -1,0 +1,86 @@
+{
+  "expo": {
+    "assets": [
+      "./assets/models/source/Tomato.obj",
+      "../../assets/models/source/corn.fbx",
+      "./assets/models/source/model.onj",
+      "./assets/models/source/Corn.obj",
+      "./assets/models/source/Corn_mtlFile.mtl",
+      "./asset/models/source/tomato-plant.mtl",
+      "./assets/models/source/Carrot.obj",
+      "./assets/models/textures/tomato_texture/TEXTURE_little_leaf.png",
+      "./assets/models/textures/tomato_texture/TEXTURE_Tomato_Leaf.png",
+      "./assets/models/textures/tomato_texture/mask-SF.png",
+      "./assets/models/textures/tomato_texture/tomato_albedo2_NRM.jpeg",
+      "./assets/models/textures/tomato_texture/tomato_albedo2.png",
+      "./assets/models/textures/tomato_texture/tomato_crazy1_OCC.png",
+      "./assets/models/textures/tomato_texture/tomato_crazy1_DISP.png",
+      "./assets/models/textures/tomato_texture/tomato_crazy1_SPEC.png",
+      "./assets/models/textures/basil_texture/tex_u0_v0.png",
+      "./assets/models/textures/basil_texture/tex_u0_v0.jpg",
+      "./assets/models/textures/Mario/0x3b7d69bc.png",
+      "./assets/models/textures/Mario/0x4c506d2f.png",
+      "./assets/models/textures/Mario/0x39b36443.png",
+      "./assets/models/textures/carrot_texture/Carrot.jpeg",
+      "./assets/models/textures/corn_texture/corn.jpg"
+    ],
+    "assetBundlePatterns": [
+      "assets/**/*"
+    ],
+    "name": "AgriARApp",
+    "slug": "AgriARApp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "permission": [
+        "CAMERA",
+        "MEDIA_LIBRARY",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.giannid077.AgriARApp"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "f6505c0b-7055-40b9-966a-ee2f58a5c1a6"
+      }
+    }
+  }
+}
