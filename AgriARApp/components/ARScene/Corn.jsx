@@ -234,7 +234,7 @@ const CornScene = ({ showAR, onStopAR , navigation}) => {
       if (data.status === 1) {
         const nutriments = data.product.nutriments;
         setFoodData({
-          productName: data.product.product_name || 'Pomodoro',
+          productName: data.product.product_name || 'Mais',
           energy: nutriments.energy_100g || 'N/A',
           proteins: nutriments.proteins_100g || 'N/A',
           carbohydrates: nutriments.carbohydrates_100g || 'N/A',
@@ -292,6 +292,7 @@ const CornScene = ({ showAR, onStopAR , navigation}) => {
       
       // Get the first result which is likely Solanum lycopersicum (tomato)
       const plantId = searchData.data[0].id;
+      console.log(plantId)
       
       // Get detailed plant information using the ID
       const detailResponse = await fetch(
