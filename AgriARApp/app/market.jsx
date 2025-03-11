@@ -22,8 +22,8 @@ import * as Location from 'expo-location';
 
 // Configurazione API OpenStreetMap Overpass
 const API_BASE_URL = 'https://overpass-api.de/api/interpreter';
-// Raggio di ricerca in km
-const SEARCH_RADIUS = 30;
+// Raggio di ricerca predefinito in km
+const DEFAULT_SEARCH_RADIUS = 30;
 
 const FruitMarkets = () => {
   const router = useRouter();
@@ -39,6 +39,9 @@ const FruitMarkets = () => {
   const [manualLocation, setManualLocation] = useState('');
   const [manualLocationError, setManualLocationError] = useState(null);
   const [marketsLoaded, setMarketsLoaded] = useState(false);
+  
+  // Nuovo stato per il raggio di ricerca personalizzato
+  const [searchRadius, setSearchRadius] = useState(DEFAULT_SEARCH_RADIUS.toString());
   
   // Funzione per cercare una posizione tramite geocoding
   const geocodeLocation = async (locationString) => {
@@ -64,10 +67,25 @@ const FruitMarkets = () => {
     }
   };
   
+  // Funzione per validare il raggio di ricerca
+  const validateSearchRadius = (radius) => {
+    const parsedRadius = parseFloat(radius);
+    if (isNaN(parsedRadius) || parsedRadius <= 0 || parsedRadius > 100) {
+      return false;
+    }
+    return true;
+  };
+  
   // Funzione per gestire l'invio della posizione manuale
   const handleManualLocationSubmit = async () => {
     if (!manualLocation.trim()) {
       setManualLocationError('Inserisci un indirizzo valido');
+      return;
+    }
+    
+    // Validazione del raggio di ricerca
+    if (!validateSearchRadius(searchRadius)) {
+      setManualLocationError('Il raggio di ricerca deve essere un numero compreso tra 1 e 100 km');
       return;
     }
     
@@ -77,7 +95,7 @@ const FruitMarkets = () => {
     if (geocodedLocation) {
       setUserLocation(geocodedLocation);
       setLocationModalVisible(false);
-      fetchMarkets(geocodedLocation);
+      fetchMarkets(geocodedLocation, parseFloat(searchRadius));
     } else {
       setLoading(false);
     }
@@ -87,6 +105,13 @@ const FruitMarkets = () => {
   const handleUseCurrentLocation = async () => {
     try {
       setManualLocationError(null);
+      
+      // Validazione del raggio di ricerca
+      if (!validateSearchRadius(searchRadius)) {
+        setManualLocationError('Il raggio di ricerca deve essere un numero compreso tra 1 e 100 km');
+        return;
+      }
+      
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== 'granted') {
@@ -113,7 +138,7 @@ const FruitMarkets = () => {
       
       setUserLocation(currentLocation);
       setLocationModalVisible(false);
-      fetchMarkets(currentLocation);
+      fetchMarkets(currentLocation, parseFloat(searchRadius));
     } catch (error) {
       console.error('Errore nell\'ottenere la posizione:', error);
       setManualLocationError('Impossibile ottenere la posizione attuale. Verifica che il GPS sia attivo.');
@@ -154,7 +179,7 @@ const FruitMarkets = () => {
     `;
   };
   
-  const fetchMarkets = async (location) => {
+  const fetchMarkets = async (location, radius = DEFAULT_SEARCH_RADIUS) => {
     setLoading(true);
     setError(null);
     
@@ -168,11 +193,11 @@ const FruitMarkets = () => {
     try {
       const apiUrl = API_BASE_URL;
       
-      // Costruisci la query utilizzando la posizione
+      // Costruisci la query utilizzando la posizione e il raggio specificato
       const query = buildOverpassQuery(
         location.latitude,
         location.longitude,
-        SEARCH_RADIUS
+        radius
       );
       
       const params = { data: query };
@@ -580,6 +605,20 @@ const FruitMarkets = () => {
             />
           </View>
           
+          {/* Nuovo input per il raggio di ricerca */}
+          <View style={styles.radiusInputContainer}>
+            <Ionicons name="compass-outline" size={20} color="#94A3B8" style={styles.locationInputIcon} />
+            <TextInput
+              style={styles.radiusInput}
+              placeholder="Raggio di ricerca in km"
+              placeholderTextColor="#94A3B8"
+              value={searchRadius}
+              onChangeText={setSearchRadius}
+              keyboardType="numeric"
+            />
+            <Text style={styles.radiusUnit}>km</Text>
+          </View>
+          
           {manualLocationError && (
             <Text style={styles.locationInputError}>{manualLocationError}</Text>
           )}
@@ -643,15 +682,22 @@ const FruitMarkets = () => {
           </View>
         )}
         
-        {/* Pulsante per cambiare posizione - mostrato solo quando abbiamo caricato i mercati */}
+        {/* Pulsante per cambiare posizione e raggio - mostrato solo quando abbiamo caricato i mercati */}
         {marketsLoaded && (
-          <TouchableOpacity 
-            style={styles.changeLocationButton}
-            onPress={() => setLocationModalVisible(true)}
-          >
-            <Ionicons name="location" size={18} color="#FFFFFF" />
-            <Text style={styles.changeLocationText}>Cambia posizione</Text>
-          </TouchableOpacity>
+          <View style={styles.actionButtonsContainer}>
+            <TouchableOpacity 
+              style={styles.changeLocationButton}
+              onPress={() => setLocationModalVisible(true)}
+            >
+              <Ionicons name="location" size={18} color="#FFFFFF" />
+              <Text style={styles.changeLocationText}>Cambia posizione</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.radiusDisplayContainer}>
+              <Ionicons name="compass" size={18} color="#10B981" />
+              <Text style={styles.radiusDisplayText}>Raggio: {parseFloat(searchRadius)} km</Text>
+            </View>
+          </View>
         )}
         
         {/* Loading State */}
@@ -677,7 +723,7 @@ const FruitMarkets = () => {
         {!loading && !error && marketsLoaded && (
           <>
             <Text style={styles.resultsText}>
-              {filteredMarkets.length} negozi ortofrutticoli trovati entro {SEARCH_RADIUS} km dalla tua posizione
+              {filteredMarkets.length} negozi ortofrutticoli trovati entro {parseFloat(searchRadius)} km dalla tua posizione
             </Text>
             <FlatList
               data={filteredMarkets}
@@ -686,391 +732,376 @@ const FruitMarkets = () => {
               contentContainerStyle={styles.marketsList}
               showsVerticalScrollIndicator={false}
               refreshing={loading}
-              onRefresh={() => fetchMarkets(userLocation)}
+              onRefresh={() => fetchMarkets(userLocation, parseFloat(searchRadius))}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Ionicons name="sad-outline" size={64} color="#94A3B8" />
-                  <Text style={styles.emptyText}>Nessun negozio trovato</Text>
-                  <Text style={styles.emptySubtext}>Nessun negozio ortofrutticolo trovato entro {SEARCH_RADIUS} km dalla tua posizione</Text>
-                  <TouchableOpacity 
-                    style={[styles.retryButton, { marginTop: 20, backgroundColor: '#10B981' }]} 
-                    onPress={() => setLocationModalVisible(true)}
-                  >
-                    <Text style={styles.retryButtonText}>Cambia posizione</Text>
-                  </TouchableOpacity>
+                  <Ionicons name="search-outline" size={64} color="#94A3B8" />
+                  <Text style={styles.emptyText}>
+                    Nessun negozio ortofrutticolo trovato. Prova ad ampliare il raggio di ricerca o a cambiare posizione.
+                  </Text>
                 </View>
               }
             />
           </>
         )}
         
-        {/* Info Button - mostrato solo quando abbiamo caricato i mercati */}
-        {marketsLoaded && (
-          <TouchableOpacity 
-            style={styles.infoButton}
-            onPress={() => Alert.alert(
-              "Informazioni",
-              `Questa pagina mostra i negozi di frutta e verdura entro ${SEARCH_RADIUS} km dalla tua posizione. I dati sono forniti da OpenStreetMap. Clicca su un negozio per aprire Google Maps e ottenere indicazioni stradali.`,
-              [{ text: "OK" }]
-            )}
-          >
-            <LinearGradient
-              colors={['#10B981', '#047857']}
-              style={styles.infoButtonGradient}
-            >
-              <Ionicons name="information-circle-outline" size={24} color="#FFFFFF" />
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-        
-        {/* Modal per l'inserimento della posizione - reso sempre visibile all'avvio */}
+        {/* Renderizzazione del modal di inserimento posizione */}
         {renderLocationModal()}
       </LinearGradient>
     </SafeAreaView>
   );
 };
 
-// Dati di fallback per sviluppo o test
-// Dati di fallback per sviluppo o test
+// Dati di fallback per il debugging
 const fallbackMarkets = [
-    {
-      id: '1',
-      name: 'Frutta e Verdura da Mario',
-      address: 'Via Roma 123, Roma',
-      schedule: 'Lunedì-Venerdì: 08:00-19:00, Sabato: 08:00-13:00',
-      products: ['Frutta di stagione', 'Verdura locale', 'Agrumi'],
-      type: 'Fruttivendolo',
-      certifications: ['Biologico', 'Km0']
-    },
-    {
-      id: '2',
-      name: 'Mercato Contadino',
-      address: 'Piazza Navona 45, Roma',
-      schedule: 'Martedì-Sabato: 07:00-14:00',
-      products: ['Ortaggi freschi', 'Frutta', 'Erbe aromatiche'],
-      type: 'Azienda agricola con vendita diretta',
-      certifications: ['Km0']
-    },
-    {
-      id: '3',
-      name: 'OrtoFresco',
-      address: 'Via Nazionale 78, Roma',
-      schedule: 'Lunedì-Sabato: 09:00-20:00',
-      products: ['Frutta esotica', 'Verdura biologica', 'Spezie'],
-      type: 'Negozio di frutta',
-      certifications: ['Biologico']
-    }
-  ];
-  
-  const styles = StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: '#111827',
-    },
-    container: {
-      flex: 1,
-      padding: 16,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 16,
-    },
-    backButton: {
-      padding: 8,
-    },
-    headerTitle: {
-      fontSize: 20,
-      fontWeight: 'bold',
-      color: '#FFFFFF',
-    },
-    placeholderButton: {
-      width: 40,
-    },
-    searchContainer: {
-      marginBottom: 16,
-    },
-    searchBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
-    searchIcon: {
-      marginRight: 8,
-    },
-    searchInput: {
-      flex: 1,
-      height: 40,
-      color: '#FFFFFF',
-      fontSize: 16,
-    },
-    changeLocationButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(59, 130, 246, 0.2)',
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      alignSelf: 'flex-start',
-      marginBottom: 16,
-    },
-    changeLocationText: {
-      color: '#FFFFFF',
-      marginLeft: 8,
-      fontWeight: '500',
-    },
-    loadingContainer: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    loadingText: {
-      color: '#E5E7EB',
-      marginTop: 16,
-      fontSize: 16,
-    },
-    errorContainer: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 20,
-    },
-    errorText: {
-      color: '#F87171',
-      textAlign: 'center',
-      marginTop: 16,
-      marginBottom: 20,
-      fontSize: 16,
-    },
-    retryButton: {
-      backgroundColor: '#3B82F6',
-      paddingHorizontal: 20,
-      paddingVertical: 10,
-      borderRadius: 10,
-      marginTop: 10,
-    },
-    retryButtonText: {
-      color: '#FFFFFF',
-      fontWeight: 'bold',
-    },
-    resultsText: {
-      color: '#E5E7EB',
-      marginBottom: 16,
-      fontSize: 16,
-    },
-    marketsList: {
-      paddingBottom: 80,
-    },
-    marketCard: {
-      marginBottom: 16,
-      borderRadius: 16,
-      overflow: 'hidden',
-    },
-    marketGradient: {
-      borderRadius: 16,
-      overflow: 'hidden',
-    },
-    marketImageContainer: {
-      height: 120,
-      borderTopLeftRadius: 16,
-      borderTopRightRadius: 16,
-      overflow: 'hidden',
-    },
-    marketImage: {
-      width: '100%',
-      height: '100%',
-    },
-    marketInfo: {
-      padding: 16,
-    },
-    marketName: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: '#FFFFFF',
-      marginBottom: 8,
-    },
-    marketTypeContainer: {
-      backgroundColor: 'rgba(37, 99, 235, 0.3)',
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 50,
-      alignSelf: 'flex-start',
-      marginBottom: 12,
-    },
-    marketTypeText: {
-      color: '#93C5FD',
-      fontSize: 14,
-      fontWeight: '500',
-    },
-    marketDetail: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    marketText: {
-      color: '#E5E7EB',
-      marginLeft: 8,
-      flex: 1,
-    },
-    productsContainer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      marginTop: 8,
-      marginBottom: 12,
-    },
-    productTag: {
-      backgroundColor: 'rgba(16, 185, 129, 0.2)',
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 50,
-      marginRight: 8,
-      marginBottom: 8,
-    },
-    productText: {
-      color: '#6EE7B7',
-      fontSize: 12,
-    },
-    directionsButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#3B82F6',
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 8,
-      marginTop: 8,
-    },
-    directionsButtonText: {
-      color: '#FFFFFF',
-      fontWeight: '600',
-      marginLeft: 8,
-    },
-    emptyContainer: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 20,
-      marginTop: 40,
-    },
-    emptyText: {
-      color: '#E5E7EB',
-      fontSize: 18,
-      fontWeight: 'bold',
-      marginTop: 16,
-    },
-    emptySubtext: {
-      color: '#94A3B8',
-      textAlign: 'center',
-      marginTop: 8,
-      fontSize: 14,
-    },
-    infoButton: {
-      position: 'absolute',
-      bottom: 20,
-      right: 20,
-      borderRadius: 30,
-      overflow: 'hidden',
-      elevation: 5,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-    },
-    infoButtonGradient: {
-      width: 48,
-      height: 48,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 24,
-    },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 16,
-    },
-    modalContainer: {
-      backgroundColor: '#1F2937',
-      borderRadius: 16,
-      width: '90%',
-      padding: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-      elevation: 5,
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 16,
-    },
-    modalTitle: {
-      fontSize: 20,
-      fontWeight: 'bold',
-      color: '#FFFFFF',
-    },
-    modalSubtitle: {
-      color: '#94A3B8',
-      marginBottom: 16,
-      fontSize: 14,
-      lineHeight: 20,
-    },
-    locationInputContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      marginBottom: 8,
-    },
-    locationInputIcon: {
-      marginRight: 8,
-    },
-    locationInput: {
-      flex: 1,
-      height: 50,
-      color: '#FFFFFF',
-      fontSize: 16,
-    },
-    locationInputError: {
-      color: '#F87171',
-      fontSize: 14,
-      marginBottom: 16,
-    },
-    locationSubmitButton: {
-      backgroundColor: '#3B82F6',
-      paddingVertical: 12,
-      paddingHorizontal: 20,
-      borderRadius: 10,
-      alignItems: 'center',
-      marginTop: 8,
-      marginBottom: 16,
-    },
-    locationSubmitText: {
-      color: '#FFFFFF',
-      fontWeight: 'bold',
-      fontSize: 16,
-    },
-    getCurrentLocationButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 12,
-      paddingHorizontal: 20,
-      borderRadius: 10,
-      backgroundColor: 'rgba(59, 130, 246, 0.15)',
-    },
-    getCurrentLocationText: {
-      color: '#3B82F6',
-      fontWeight: '600',
-      fontSize: 14,
-    }
-  });
-  
-  export default FruitMarkets;
+  {
+    id: '1',
+    name: 'Frutteria del Centro',
+    address: 'Via Roma 123, Milano',
+    schedule: 'Lunedì-Venerdì: 08:00-19:00, Sabato: 08:00-13:00',
+    products: ['Frutta fresca', 'Verdura di stagione', 'Prodotti locali'],
+    certifications: ['Biologico', 'Km0'],
+    type: 'Fruttivendolo',
+  },
+  {
+    id: '2',
+    name: 'Mercato Contadino',
+    address: 'Piazza Duomo 10, Milano',
+    schedule: 'Martedì-Sabato: 07:00-14:00',
+    products: ['Frutta', 'Verdura', 'Prodotti biologici'],
+    certifications: ['Biologico'],
+    type: 'Mercato contadino',
+  },
+  {
+    id: '3',
+    name: 'Azienda Agricola Rossi',
+    address: 'Via Verdi 45, Milano',
+    schedule: 'Lunedì-Sabato: 09:00-18:00',
+    products: ['Frutta', 'Verdura', 'Conserve', 'Miele'],
+    certifications: ['Km0'],
+    type: 'Azienda agricola con vendita diretta',
+  }
+];
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#111827',
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(31, 41, 55, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  placeholderButton: {
+    width: 40,
+  },
+  searchContainer: {
+    marginBottom: 16,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    height: 44,
+    backgroundColor: 'rgba(31, 41, 55, 0.6)',
+    borderRadius: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    color: '#FFFFFF',
+    fontSize: 16,
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  changeLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.8)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  changeLocationText: {
+    marginLeft: 4,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  radiusDisplayContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  radiusDisplayText: {
+    marginLeft: 4,
+    color: '#10B981',
+    fontWeight: '500',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#E5E7EB',
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  errorText: {
+    marginTop: 16,
+    marginBottom: 24,
+    fontSize: 16,
+    color: '#E5E7EB',
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  resultsText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginBottom: 8,
+  },
+  marketsList: {
+    paddingBottom: 16,
+  },
+  marketCard: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  marketGradient: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  marketImageContainer: {
+    height: 150,
+    width: '100%',
+    backgroundColor: 'rgba(31, 41, 55, 0.5)',
+  },
+  marketImage: {
+    width: '100%',
+    height: '100%',
+  },
+  marketInfo: {
+    padding: 16,
+  },
+  marketName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  marketTypeContainer: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  marketTypeText: {
+    fontSize: 12,
+    color: '#60A5FA',
+    fontWeight: '500',
+  },
+  marketDetail: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  marketText: {
+    fontSize: 14,
+    color: '#E5E7EB',
+    marginLeft: 8,
+    flex: 1,
+  },
+  productsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  productTag: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  productText: {
+    fontSize: 12,
+    color: '#10B981',
+  },
+  directionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B82F6',
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  directionsButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 16,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContainer: {
+    width: '100%',
+    backgroundColor: '#1F2937',
+    borderRadius: 16,
+    padding: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginBottom: 24,
+  },
+  locationInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#374151',
+    backgroundColor: '#111827',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  locationInputIcon: {
+    marginRight: 8,
+  },
+  locationInput: {
+    flex: 1,
+    height: 44,
+    color: '#FFFFFF',
+    fontSize: 16,
+  },
+  radiusInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#374151',
+    backgroundColor: '#111827',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  radiusInput: {
+    flex: 1,
+    height: 44,
+    color: '#FFFFFF',
+    fontSize: 16,
+  },
+  radiusUnit: {
+    color: '#94A3B8',
+    fontSize: 16,
+  },
+  locationInputError: {
+    color: '#F87171',
+    marginBottom: 16,
+  },
+  locationSubmitButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  locationSubmitText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  getCurrentLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+    borderRadius: 8,
+  },
+  getCurrentLocationText: {
+    color: '#3B82F6',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+});
+
+export default FruitMarkets;

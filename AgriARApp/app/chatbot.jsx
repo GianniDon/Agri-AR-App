@@ -24,6 +24,9 @@ import tractor from './tractor';
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
+// API key for Perenual - Replace with your actual API key
+const PERENUAL_API_KEY = "YOUR_PERENUAL_API_KEY";
+
 // Mappa dei nomi delle piante con singolari e plurali - Ampliata con più varianti
 const nameMap = {
   // Singolari
@@ -79,15 +82,6 @@ const nameMap = {
   "asparagi": "asparagus",
   "finocchi": "fennel",
   "porri": "leek"
-};
-
-// Termini alternativi per piante che potrebbero avere nomi diversi in API
-const alternativeTerms = {
-  "lettuce": ["salad", "green leaf", "lettuce"],
-  "tomato": ["tomato", "tomatoes"],
-  "carrot": ["carrot", "carrots"],
-  "zucchini": ["zucchini", "courgette", "summer squash"],
-  // Aggiungi altre piante problematiche qui
 };
 
 // Parole comuni da ignorare nell'analisi del testo
@@ -278,7 +272,15 @@ const Chatbot = () => {
         router.push("/market");
         setMenuOpen(false);
       }
+    },
+    {
+      icon: "bar-chart-outline",
+      text:"Valore sul mercato",
+      action: () => {
+        router.push("/marketvalue");
+        setMenuOpen(false);
     }
+  }
   ];
 
   const goToCalendar = () => {
@@ -297,17 +299,17 @@ const Chatbot = () => {
     setMenuOpen(false);
   };
 
-  // Funzione migliorata per formattare i dati delle piante
+  // Funzione per formattare i dati delle piante dalla Perenual API
   const formatPlantData = (data) => {
-    if (!data || !data.data || data.data.length === 0) {
+    if (!data || !data.data) {
       return "Mi dispiace, non ho trovato informazioni per questa pianta.";
     }
 
-    const plant = data.data[0].attributes;
-    let response = `Nome: ${plant.name || 'Non disponibile'}\n`;
+    const plant = data.data;
+    let response = `Nome: ${plant.common_name || 'Non disponibile'}\n`;
     
-    if (plant.binomial_name) {
-      response += `Nome Scientifico: ${plant.binomial_name}\n`;
+    if (plant.scientific_name && plant.scientific_name.length > 0) {
+      response += `Nome Scientifico: ${plant.scientific_name[0]}\n`;
     }
     
     if (plant.description) {
@@ -315,33 +317,108 @@ const Chatbot = () => {
     }
 
     response += '\nRequisiti di coltivazione:\n';
-    if (plant.sun_requirements) {
-      response += `- Esposizione: ${plant.sun_requirements}\n`;
+    
+    if (plant.sunlight && plant.sunlight.length > 0) {
+      response += `- Esposizione: ${plant.sunlight.join(', ')}\n`;
     }
-    if (plant.sowing_method) {
-      response += `- Metodo di semina: ${plant.sowing_method}\n`;
+    
+    if (plant.watering) {
+      response += `- Irrigazione: ${plant.watering}\n`;
     }
-    if (plant.height) {
-      response += `- Altezza: ${plant.height} cm\n`;
+    
+    if (plant.hardiness && plant.hardiness.min && plant.hardiness.max) {
+      response += `- Resistenza al clima: zone ${plant.hardiness.min} - ${plant.hardiness.max}\n`;
     }
-    if (plant.row_spacing) {
-      response += `- Spaziatura: ${plant.row_spacing} cm\n`;
+    
+    if (plant.maintenance) {
+      response += `- Manutenzione: ${plant.maintenance}\n`;
     }
-    if (plant.growing_degree_days) {
-      response += `- Periodo di crescita: ${plant.growing_degree_days} giorni\n`;
+
+    if (plant.growth_rate) {
+      response += `- Tasso di crescita: ${plant.growth_rate}\n`;
+    }
+    
+    if (plant.dimensions) {
+      if (plant.dimensions.type === "Height") {
+        response += `- Altezza: ${plant.dimensions.min_value} - ${plant.dimensions.max_value} ${plant.dimensions.unit}\n`;
+      }
     }
     
     // Aggiungiamo consigli di coltivazione generici se i dati sono scarsi
-    if (!plant.sowing_method && !plant.height && !plant.row_spacing && !plant.growing_degree_days) {
+    if (!plant.sunlight && !plant.watering && !plant.maintenance) {
       response += "- Posiziona in un'area con buona esposizione solare\n";
       response += "- Mantieni il terreno leggermente umido, evitando ristagni\n";
       response += "- Controlla regolarmente per insetti dannosi\n";
+    }
+    
+    // Stagione di piantagione se disponibile
+    if (plant.planting_time) {
+      response += `\nPeriodo di piantagione consigliato: ${plant.planting_time}\n`;
     }
 
     return response.trim();
   };
 
-  // Funzione migliorata per l'invio dei messaggi con gestione errori e tentativi alternativi
+  // Funzione di fallback per estrarre informazioni utili quando la ricerca non produce risultati
+  const getPlantFallbackInfo = (plantName) => {
+    const englishName = nameMap[plantName] || plantName;
+    
+    // Mappa dei consigli generici per piante comuni
+    const genericAdvice = {
+      'tomato': {
+        sunlight: 'Pieno sole (almeno 6-8 ore di sole diretto)',
+        watering: 'Regolare, mantenendo il terreno uniformemente umido',
+        soil: 'Terreno ricco, ben drenato con pH 6.0-6.8',
+        season: 'Primavera-Estate',
+        tips: 'Utilizzare supporti per le piante. Rimuovere i germogli laterali per varietà indeterminate.'
+      },
+      'carrot': {
+        sunlight: 'Pieno sole a mezz\'ombra',
+        watering: 'Regolare ma leggera, evitando eccessi',
+        soil: 'Terreno sabbioso, profondo, senza pietre, pH 6.0-6.8',
+        season: 'Primavera e tarda estate',
+        tips: 'Diradare le piantine per evitare sovraffollamento. Terreno soffice per radici diritte.'
+      },
+      'lettuce': {
+        sunlight: 'Mezz\'ombra, specialmente in estate',
+        watering: 'Frequente e leggera, terreno sempre umido',
+        soil: 'Terreno ricco, fresco, ben drenato',
+        season: 'Primavera e autunno',
+        tips: 'Seminare a intervalli regolari per raccolto continuo. Raccogliere presto per evitare gusto amaro.'
+      },
+      'zucchini': {
+        sunlight: 'Pieno sole',
+        watering: 'Regolare, alla base della pianta',
+        soil: 'Terreno fertile, ben drenato',
+        season: 'Tarda primavera-estate',
+        tips: 'Lasciare spazio sufficiente (almeno 1m) tra le piante. Raccogliere frequentemente.'
+      }
+    };
+    
+    // Cerca consigli specifici o fornisci un messaggio generale
+    if (genericAdvice[englishName]) {
+      const advice = genericAdvice[englishName];
+      return `Consigli generali per la coltivazione di ${plantName}:
+      
+- Esposizione: ${advice.sunlight}
+- Irrigazione: ${advice.watering}
+- Terreno: ${advice.soil}
+- Stagione: ${advice.season}
+- Suggerimenti: ${advice.tips}`;
+    } else {
+      return `Mi dispiace, non ho trovato informazioni specifiche su "${plantName}". 
+      
+Ecco alcuni consigli generali:
+- Verifica la stagione di semina appropriata
+- Assicurati che il terreno sia adeguatamente preparato
+- Controlla il fabbisogno di acqua e luce
+- Proteggi la pianta da parassiti e malattie
+
+Puoi provare a chiedere di un'altra pianta o formulare la domanda in modo diverso.`;
+    }
+  };
+
+  // Funzione migliorata per l'invio dei messaggi con connessione a Perenual API
   const handleSendMessage = async () => {
     if (message.trim()) {
       const userMessage = { text: message, type: 'user' };
@@ -354,119 +431,82 @@ const Chatbot = () => {
         const plantName = extractPlantName(message);
         const searchTerm = nameMap[plantName] || plantName;
         
-        // Teniamo traccia di tutti i tentativi di ricerca
-        let allResponses = [];
-        let foundData = null;
+        if (!searchTerm) {
+          throw new Error("Nessun nome di pianta riconosciuto");
+        }
         
-        // Prima cerca con il termine principale
-        const apiUrl = `https://openfarm.cc/api/v1/crops?filter=${encodeURIComponent(searchTerm)}`;
+        // Chiamata all'API Perenual
+        const apiUrl = `https://perenual.com/api/species-list?key=${PERENUAL_API_KEY}&q=${encodeURIComponent(searchTerm)}`;
         
-        const response = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-        });
-
+        const response = await fetch(apiUrl);
+        
         if (response.ok) {
           const data = await response.json();
-          allResponses.push(data);
           
           if (data && data.data && data.data.length > 0) {
-            foundData = data;
-            logSearch(message, plantName, searchTerm, true);
-          }
-        }
-
-        // Se non abbiamo trovato nulla, prova con termini alternativi
-        if (!foundData && alternativeTerms[searchTerm]) {
-          for (const altTerm of alternativeTerms[searchTerm]) {
-            const altApiUrl = `https://openfarm.cc/api/v1/crops?filter=${encodeURIComponent(altTerm)}`;
+            // Ottieni i dettagli completi della prima pianta trovata
+            const plantId = data.data[0].id;
+            const detailsUrl = `https://perenual.com/api/species/details/${plantId}?key=${PERENUAL_API_KEY}`;
             
-            try {
-              const altResponse = await fetch(altApiUrl, {
-                method: 'GET',
-                headers: {
-                  'Accept': 'application/json',
-                  'Content-Type': 'application/json',
-                },
-              });
+            const detailsResponse = await fetch(detailsUrl);
+            
+            if (detailsResponse.ok) {
+              const detailsData = await detailsResponse.json();
               
-              if (altResponse.ok) {
-                const altData = await altResponse.json();
-                allResponses.push(altData);
-                
-                if (altData && altData.data && altData.data.length > 0) {
-                  foundData = altData;
-                  logSearch(message, plantName, altTerm, true);
-                  break; // Abbiamo trovato dati, usciamo dal ciclo
+              // Aggiungi i dettagli della cura per le piante
+              const careUrl = `https://perenual.com/api/species/care-guide-list?key=${PERENUAL_API_KEY}&species_id=${plantId}`;
+              let careData = null;
+              
+              try {
+                const careResponse = await fetch(careUrl);
+                if (careResponse.ok) {
+                  careData = await careResponse.json();
+                  // Combina i dati di dettaglio con quelli di cura
+                  if (careData && careData.data && careData.data.length > 0) {
+                    detailsData.care_guide = careData.data[0];
+                  }
                 }
+              } catch (careError) {
+                console.error("Error fetching care data:", careError);
               }
-            } catch (altError) {
-              console.error("Alternative search error:", altError);
+              
+              // Crea una risposta formattata
+              const formattedData = { data: detailsData };
+              const botMessage = { 
+                text: formatPlantData(formattedData), 
+                type: 'bot' 
+              };
+              
+              setMessages(prev => [...prev, botMessage]);
+              logSearch(message, plantName, searchTerm, true);
+            } else {
+              throw new Error("Errore nel recupero dei dettagli della pianta");
             }
-          }
-        }
-
-        // Se ancora non abbiamo dati, ricorriamo a una ricerca generica
-        if (!foundData && searchTerm === 'lettuce') {
-          try {
-            const genericUrl = `https://openfarm.cc/api/v1/crops?filter=salad`;
-            const genericResponse = await fetch(genericUrl, {
-              method: 'GET',
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-              },
-            });
+          } else {
+            // Nessuna pianta trovata con questo termine
+            logSearch(message, plantName, searchTerm, false);
             
-            if (genericResponse.ok) {
-              const genericData = await genericResponse.json();
-              if (genericData && genericData.data && genericData.data.length > 0) {
-                foundData = genericData;
-                logSearch(message, plantName, "salad (generic fallback)", true);
-              }
-            }
-          } catch (genericError) {
-            console.error("Generic search error:", genericError);
+            const fallbackMessage = { 
+              text: getPlantFallbackInfo(plantName), 
+              type: 'bot' 
+            };
+            
+            setMessages(prev => [...prev, fallbackMessage]);
           }
-        }
-
-        // Gestione risposta finale
-        if (foundData) {
-          const botMessage = { 
-            text: formatPlantData(foundData), 
-            type: 'bot' 
-          };
-          setMessages(prev => [...prev, botMessage]);
         } else {
-          logSearch(message, plantName, searchTerm, false);
-          
-          // Risposta di fallback con indicazioni
-          const notFoundMessage = { 
-            text: `Mi dispiace, non ho trovato informazioni specifiche su "${plantName}". 
-            
-Ecco alcuni consigli generali:
-- Verifica la stagione di semina appropriata
-- Assicurati che il terreno sia adeguatamente preparato
-- Controlla il fabbisogno di acqua e luce
-- Proteggi la pianta da parassiti e malattie
-
-Puoi provare a chiedere di un'altra pianta o formulare la domanda in modo diverso.`, 
-            type: 'bot' 
-          };
-          setMessages(prev => [...prev, notFoundMessage]);
+          throw new Error("Errore nella ricerca della pianta");
         }
-
       } catch (error) {
         console.error("Error:", error);
         
-        const errorMessage = { 
-          text: "Mi dispiace, si è verificato un errore durante la ricerca. Verifica la tua connessione e riprova tra qualche momento.", 
+        // Risposta di fallback in caso di errore
+        const plantName = extractPlantName(message);
+        const fallbackMessage = { 
+          text: getPlantFallbackInfo(plantName),
           type: 'bot' 
         };
-        setMessages(prev => [...prev, errorMessage]);
+        
+        setMessages(prev => [...prev, fallbackMessage]);
       } finally {
         setLoading(false);
         setTimeout(() => {
@@ -759,299 +799,268 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
   backButton: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    padding: 8,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#FFFFFF",
-    letterSpacing: 0.5,
   },
   menuButton: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    padding: 8,
   },
   // Welcome Screen
   welcomeContainer: {
     flex: 1,
-    padding: 20,
-    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
   welcomeHeader: {
-    alignItems: "center",
-    marginVertical: 24,
+    marginBottom: 24,
   },
   welcomeTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 12,
-    textAlign: "center",
+    marginBottom: 8,
   },
   welcomeDescription: {
     fontSize: 16,
-    color: "#E5E7EB",
-    textAlign: "center",
+    color: "#94A3B8",
     lineHeight: 24,
   },
   suggestionsContainer: {
-    width: "100%",
-    marginBottom: 20,
+    marginBottom: 30,
   },
   suggestionCard: {
-    marginBottom: 16,
-    borderRadius: 16,
-    overflow: "hidden",
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    marginBottom: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   suggestionGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
   },
   suggestionIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   suggestionText: {
-    flex: 1,
-    color: "#FFFFFF",
-    fontWeight: "bold",
+    color: '#FFFFFF',
     fontSize: 16,
+    flex: 1,
   },
   welcomeImage: {
-    width: "100%",
-    height: 120,
-    marginTop: 20,
-  },
-  // Chat Container
-  chatContainer: {
-    flex: 1,
-  },
-  chatContent: {
-    padding: 20,
-    paddingBottom: 30,
-  },
-  messageBubble: {
-    flexDirection: "row",
-    marginBottom: 16,
-    maxWidth: "85%",
-  },
-  botBubble: {
-    alignSelf: "flex-start",
-  },
-  userBubble: {
-    alignSelf: "flex-end",
-    flexDirection: "row-reverse",
-  },
-  botAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#3B82F6",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-  },
-  messageContent: {
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    maxWidth: "90%",
-  },
-  botContent: {
-    backgroundColor: "rgba(59, 130, 246, 0.15)",
-    borderBottomLeftRadius: 4,
-  },
-  userContent: {
-    backgroundColor: "#3B82F6",
-    borderBottomRightRadius: 4,
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  botText: {
-    color: "#E5E7EB",
-  },
-  userText: {
-    color: "#FFFFFF",
-  },
-  loadingContainer: {
-    alignSelf: "flex-start",
-    marginBottom: 16,
-    maxWidth: "70%",
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  loadingGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  loadingText: {
-    color: "#FFFFFF",
-    marginLeft: 8,
-    fontSize: 14,
+    width: '100%',
+    height: 200,
+    alignSelf: 'center',
   },
   // Calendar
   calendarContainer: {
     flex: 1,
-    padding: 16,
   },
   calendarHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   calendarTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   closeCalendarButton: {
     padding: 8,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
   calendarContent: {
     flex: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderRadius: 16,
     padding: 16,
+  },
+  // Chat
+  chatContainer: {
+    flex: 1,
+  },
+  chatContent: {
+    padding: 16,
+    paddingBottom: 20,
+  },
+  messageBubble: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    maxWidth: '80%',
+  },
+  botBubble: {
+    alignSelf: 'flex-start',
+  },
+  userBubble: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row-reverse',
+  },
+  botAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  messageContent: {
+    borderRadius: 16,
+    padding: 12,
+    flexShrink: 1,
+  },
+  botContent: {
+    backgroundColor: '#1F2937',
+  },
+  userContent: {
+    backgroundColor: '#3B82F6',
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 22,
+    flexWrap: "wrap"
+  },
+  botText: {
+    color: '#FFFFFF',
+  },
+  userText: {
+    color: '#FFFFFF',
+  },
+  loadingContainer: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  loadingGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    padding: 12,
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    marginLeft: 8,
+    fontSize: 14,
   },
   // Side Menu
   overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000000',
     zIndex: 1,
   },
   sideMenu: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     right: 0,
-    bottom: 0,
-    width: SCREEN_WIDTH * 0.75,
+    width: 280,
+    height: '100%',
     zIndex: 2,
   },
   menuGradient: {
     flex: 1,
     paddingTop: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   menuHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 40,
-    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 32,
   },
   menuLogo: {
     width: 40,
     height: 40,
-    marginRight: 16,
+    marginRight: 12,
   },
   menuTitle: {
     fontSize: 24,
-    fontWeight: "bold",
-    color: "#FFFFFF",
+    fontWeight: 'bold',
+    color: '#FFFFFF',
     flex: 1,
   },
   closeMenuButton: {
     padding: 8,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
   menuItems: {
     flex: 1,
   },
   menuItem: {
-    marginBottom: 16,
-    borderRadius: 16,
-    overflow: "hidden",
+    marginBottom: 12,
   },
   menuItemGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
   },
   menuItemText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
+    color: '#FFFFFF',
     fontSize: 16,
-    marginLeft: 16,
+    marginLeft: 12,
   },
   logoutButton: {
-    borderRadius: 16,
-    overflow: "hidden",
-    marginTop: 20,
+    marginTop: 24,
   },
   logoutGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
   },
   logoutText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
+    color: '#FFFFFF',
     fontSize: 16,
-    marginLeft: 10,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
-  // Input Container
+  // Input
   inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(31, 41, 55, 0.8)',
     borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.1)",
-    backgroundColor: "rgba(17, 24, 39, 0.8)",
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
   input: {
     flex: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: '#374151',
     borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    color: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: '#FFFFFF',
     fontSize: 16,
     maxHeight: 120,
   },
   sendButton: {
     marginLeft: 12,
-    borderRadius: 24,
-    overflow: "hidden",
   },
   sendButtonDisabled: {
     opacity: 0.6,
   },
   sendButtonGradient: {
-    width: 48,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   }
 });
-
 export default Chatbot;

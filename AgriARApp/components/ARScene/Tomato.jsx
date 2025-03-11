@@ -28,7 +28,9 @@ import {
 import * as FileSystem from 'expo-file-system';
 
 const MODEL_ID = 'tomato-plant';
-const TREFLE_API_TOKEN = 'uBry5UjabyWC0K7bTK6nuVjfJWS07xrD2jA4WEBck2g'; 
+// Using the API token from the original code (though it appears to be incomplete)
+const API_KEY = 'sk-C90467d027a42b3829089'; // Note: This should be a complete Perenual API key
+const query = "tomato";
 
 const modelAsset = Asset.fromModule(require('../../assets/models/source/tomato-plant.obj'));
 const textureAssets = {
@@ -48,7 +50,7 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
   const [error, setError] = useState(null);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [foodData, setFoodData] = useState(null);
-  const [farmData, setFarmData] = useState(null);
+  const [plantData, setPlantData] = useState(null);
   const [showInfo, setShowInfo] = useState(true);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,15 +70,15 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
   const MAX_INFO_HEIGHT = SCREEN_HEIGHT * 0.6;
 
   const handleBackPress = () => {
-    // Pulisci gli eventuale risorse in uso
+    // Clean up any resources in use
     if (animationFrameId.current) {
       cancelAnimationFrame(animationFrameId.current);
     }
-    // Chiama onStopAR per notificare il componente genitore
+    // Call onStopAR to notify the parent component
     if (onStopAR) {
       onStopAR();
     }
-    // Se è stata passata una prop navigation, naviga indietro
+    // If navigation prop is passed, navigate back
     if (navigation) {
       navigation.goBack();
     }
@@ -124,22 +126,20 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
   ).current;
 
   const ensureLocalAsset = async (asset) => {
-      if (!asset.localUri) {
-        await asset.downloadAsync();
-      }
-      if (Platform.OS === 'ios' && !asset.localUri.startsWith('file://')) {
-        const fileName = asset.localUri.split('/').pop();
-        const destination = `${FileSystem.cacheDirectory}${fileName}`;
-        await FileSystem.copyAsync({ from: asset.localUri, to: destination });
-        return `file://${destination}`;
-      }
-      return asset.localUri;
-    };
+    if (!asset.localUri) {
+      await asset.downloadAsync();
+    }
+    if (Platform.OS === 'ios' && !asset.localUri.startsWith('file://')) {
+      const fileName = asset.localUri.split('/').pop();
+      const destination = `${FileSystem.cacheDirectory}${fileName}`;
+      await FileSystem.copyAsync({ from: asset.localUri, to: destination });
+      return `file://${destination}`;
+    }
+    return asset.localUri;
+  };
   
-
   const loadAssets = async () => {
     try {
-      
       setLoadingProgress(10);
       const modelUri = await ensureLocalAsset(modelAsset);
       console.log('🗿 Model URI:', modelUri);
@@ -183,65 +183,33 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
     });
   };
 
-  
-  // const loadTextures = async () => {
-  //   try {
-  //     console.log("📥 Inizio caricamento texture...");
-  
-  //     // Assicurati che tutti gli asset siano scaricati e accessibili
-  //     await Asset.loadAsync(Object.values(textureAssets));
-  
-  //     // Ottieni i percorsi delle texture
-  //     const leavesUri = await ensureLocalAsset(textureAssets.leaves);
-  //     const fruitUri = await ensureLocalAsset(textureAssets.fruit);
-  //     const maskUri = await ensureLocalAsset(textureAssets.mask);
-  //     const dispUri = await ensureLocalAsset(textureAssets.disp);
-  //     const occUri = await ensureLocalAsset(textureAssets.occ);
-  //     const specUri = await ensureLocalAsset(textureAssets.spec);
-  
-  //     console.log("✅ Tutte le texture sono state caricate con successo!");
-  
-  //     return {
-  //       leavesTextureUri: leavesUri,
-  //       fruitTextureUri: fruitUri,
-  //       maskTextureUri: maskUri,
-  //       dispTextureUri: dispUri,
-  //       occTextureUri: occUri,
-  //       specTextureUri: specUri
-  //     };
-  //   } catch (error) {
-  //     console.error("❌ Errore nel caricamento delle texture:", error);
-  //     return null;
-  //   }
-  // };
-  
-
   const onContextCreate = async (gl) => {
     try {
       const renderer = new Renderer({ gl });
-            renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
-            renderer.setClearColor(0x000000, 0);
-            rendererRef.current = renderer;
+      renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
+      renderer.setClearColor(0x000000, 0);
+      rendererRef.current = renderer;
+
+      const scene = new Scene();
+      sceneRef.current = scene;
+
+      const camera = new PerspectiveCamera(
+        45,
+        gl.drawingBufferWidth / gl.drawingBufferHeight,
+        0.1,
+        1000
+      );
+      camera.position.set(0, 3, 10);
+      cameraRef.current = camera;
+
+      scene.add(new AmbientLight(0xffffff, 0.7));
+      const directionalLight = new DirectionalLight(0xffffff, 1);
+      directionalLight.position.set(5, 10, 5);
+      scene.add(directionalLight);
+          
+      const { modelUri, leavesTextureUri, fruitTextureUri, maskUriTextureUri, specTextureUri, occTextureUri } = await loadAssets();
       
-            const scene = new Scene();
-            sceneRef.current = scene;
-      
-            const camera = new PerspectiveCamera(
-              45,
-              gl.drawingBufferWidth / gl.drawingBufferHeight,
-              0.1,
-              1000
-            );
-            camera.position.set(0, 3, 10);
-            cameraRef.current = camera;
-      
-            scene.add(new AmbientLight(0xffffff, 0.7));
-            const directionalLight = new DirectionalLight(0xffffff, 1);
-            directionalLight.position.set(5, 10, 5);
-            scene.add(directionalLight);
-            
-            const { modelUri, leavesTextureUri, fruitTextureUri, maskUriTextureUri, specTextureUri, occTextureUri } = await loadAssets();
-      // Creazione dei materiali
+      // Create materials
       const textureLeaves = new TextureLoader().load(leavesTextureUri);
       textureLeaves.encoding = sRGBEncoding;
 
@@ -252,10 +220,9 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
       const object = await loadModelAsync(objLoader, modelUri);
 
       setLoadingProgress(90);
-      object.scale.set(0.02,0.02,0.02)
-      object.position.set(0,0,0)
-      console.log(object.position)
-
+      object.scale.set(0.02, 0.02, 0.02);
+      object.position.set(0, 0, 0);
+      console.log(object.position);
 
       const materialLeaves = new MeshStandardMaterial({
         map: textureLeaves
@@ -265,19 +232,17 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
         map: textureFruit
       });
 
-      
-  
-      // Applicazione materiali
+      // Apply materials
       object.traverse((child) => {
         if (child.isMesh) {
-          console.log(`🛠 Applicazione materiale a: ${child.name}`);
+          console.log(`🛠 Applying material to: ${child.name}`);
   
           if (child.name.includes("default")) {
             child.material = materialLeaves;
-            console.log("➡️ 🍃 Texture foglie applicata");
+            console.log("➡️ 🍃 Leaf texture applied");
           } else if (child.name.includes("LOD0_Plant LOD_0")) {
             child.material = materialFruit;
-            console.log("➡️ 🍎 Texture frutto applicata");
+            console.log("➡️ 🍎 Fruit texture applied");
           }
         }
       });
@@ -286,7 +251,7 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
       modelRef.current = object;
       setIsModelLoaded(true);
   
-      // Avvia animazione
+      // Start animation
       const animate = () => {
         if (!showAR) return;
         if (modelRef.current) {
@@ -297,34 +262,31 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
         animationFrameId.current = requestAnimationFrame(animate);
       };
   
-      console.log("🎬 Avvio animazione.");
+      console.log("🎬 Starting animation.");
       animate();
     } catch (error) {
-      console.error("❌ Errore fatale nella creazione del contesto AR:", error);
-      setError(`Errore nell'inizializzazione della scena AR: ${error.message}`);
+      console.error("❌ Fatal error in AR context creation:", error);
+      setError(`Error initializing AR scene: ${error.message}`);
     }
   };
-  
-  
-
 
   const fetchNutritionData = async () => {
     try {
+      // Changed to fetch tomato nutritional data
       const response = await fetch(
-        'https://world.openfoodfacts.org/api/v0/product/12345.json'
+        'https://world.openfoodfacts.org/api/v0/product/8027740000277.json'
       );
       
       if (!response.ok) {
-        throw new Error('Errore nel recupero dei dati nutrizionali');
+        throw new Error('Error retrieving nutritional data');
       }
       
       const data = await response.json();
-      // console.log('Nutrition data:', data.product?.nutriments);
       
       if (data.status === 1) {
         const nutriments = data.product.nutriments;
         setFoodData({
-          productName: data.product.product_name || 'Pomodoro',
+          productName: data.product.product_name || 'Tomato',
           energy: nutriments.energy_100g || 'N/A',
           proteins: nutriments.proteins_100g || 'N/A',
           carbohydrates: nutriments.carbohydrates_100g || 'N/A',
@@ -334,22 +296,20 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
           potassium: nutriments.potassium_100g || 'N/A',
           calcium: nutriments.calcium_100g || 'N/A'
         });
-      }
+      } 
     } catch (error) {
       console.error('Error fetching nutrition data:', error);
     }
   };
 
-  useEffect(() => {
-    fetchPlantData();
-    fetchNutritionData();
-  }, []);
-
-  const fetchPlantData = async () => {
+  // Updated function to use Perenual API properly
+  const fetchPerenualPlantData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(
-        `https://openfarm.cc/api/v1/crops?filter=tomato`,
+      
+      // Search for tomato plant
+      const searchResponse = await fetch(
+        `https://perenual.com/api/species-list?key=${API_KEY}&q=${query}`,
         {
           method: 'GET',
           headers: {
@@ -359,39 +319,122 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
         }
       );
       
-      if (!response.ok) {
-        throw new Error('Errore nel recupero dei dati di coltivazione');
+      if (!searchResponse.ok) {
+        throw new Error(`Error in Perenual search: ${searchResponse.status}`);
       }
       
-      const data = await response.json();
-      //console.log('Attributi della pianta:', data.data[0].attributes);
+      const searchData = await searchResponse.json();
       
-      if (data.data.length === 0) {
-        throw new Error("Nessuna informazione trovata su OpenFarm");
+      if (!searchData.data || searchData.data.length === 0) {
+        throw new Error("No plants found on Perenual");
       }
-
-      const plantData = data.data[0].attributes;
       
-      setFarmData({
-        name: plantData.name || 'Non disponibile',
-        scientificName: plantData.binomial_name || 'Non disponibile',
-        description: plantData.description || 'Non disponibile',
-        sunRequirements: plantData.sun_requirements || 'Non specificato',
-        sowingMethod: plantData.sowing_method || 'Non specificato',
-        height: `${plantData.height || 'N/A'} cm`,
-        spread: `${plantData.spread || 'N/A'} cm`,
-        rowSpacing: `${plantData.row_spacing || 'N/A'} cm`,
-        growingDegreeDays: plantData.growing_degree_days || 'Non specificato',
-        tags: plantData.tags_array?.join(', ') || 'Nessun tag',
-        commonNames: plantData.common_names?.join(', ') || 'Non disponibile'
+      // Get the first result which is likely Solanum lycopersicum (tomato)
+      const plantId = searchData.data[0].id;
+      
+      // Get detailed plant information using the ID
+      const detailResponse = await fetch(
+        `https://perenual.com/api/species/details/${plantId}?key=${API_KEY}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (!detailResponse.ok) {
+        throw new Error(`Error retrieving plant details: ${detailResponse.status}`);
+      }
+      
+      const plant = await detailResponse.json();
+      
+      // Structure data for UI
+      setPlantData({
+        name: plant.common_name || 'Tomato',
+        scientificName: plant.scientific_name || 'Solanum lycopersicum',
+        family: plant.family || 'Solanaceae',
+        description: plant.description || "The tomato is an annual plant of the Solanaceae family, native to Central America. It's one of the most widely cultivated plants for its edible fruits rich in vitamin C and antioxidants.",
+        sunRequirements: formatPlantProperties(plant.sunlight) || 'Full sun',
+        height: formatPlantProperties(plant.dimensions?.height) || '100-300 cm',
+        spread: formatPlantProperties(plant.dimensions?.width) || '45-80 cm',
+        growingMonths: "April-September",
+        harvestMonths: "July-September",
+        soilTexture: "Well-drained, rich in organic matter",
+        soilHumidity: "Medium humidity",
+        growthRate: plant.growth_rate || 'Rapid',
+        flowerColor: formatPlantProperties(plant.flowers?.color) || 'Yellow',
+        fruitColor: 'Red (various shades depending on variety)',
+        edible: plant.edible || true,
+        vegetable: true,
+        imgUrl: plant.default_image?.regular_url || null
       });
       
       setIsLoading(false);
     } catch (error) {
-      setError(error.message);
+      console.error('Error retrieving data from Perenual:', error);
+      // Fallback static data in case of error
+      setPlantData({
+        name: 'Tomato',
+        scientificName: 'Solanum lycopersicum',
+        family: 'Solanaceae',
+        description: "The tomato is an annual plant of the Solanaceae family, native to Central America. It's one of the most widely cultivated plants for its edible fruits rich in vitamin C and antioxidants.",
+        sunRequirements: 'Full sun',
+        height: '100-300 cm',
+        spread: '45-80 cm',
+        growingMonths: 'April-September',
+        harvestMonths: 'July-September',
+        soilTexture: 'Well-drained, rich in organic matter',
+        soilHumidity: 'Medium humidity',
+        growthRate: 'Rapid',
+        flowerColor: 'Yellow',
+        fruitColor: 'Red (various shades depending on variety)',
+        edible: true,
+        vegetable: true,
+        imgUrl: null
+      });
+      setError("Unable to retrieve data from Perenual, showing alternative data");
       setIsLoading(false);
     }
   };
+
+  // Utility functions for formatting Perenual data
+  const formatPlantProperties = (property) => {
+    if (!property) return null;
+    
+    if (Array.isArray(property)) {
+      return property.join(', ');
+    }
+    
+    return property.toString();
+  };
+  
+  const formatGrowingMonths = (months) => {
+    if (!months || !Array.isArray(months) || months.length === 0) return null;
+    
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    
+    // Convert month numbers to names
+    const formattedMonths = months.map(m => monthNames[m - 1]);
+    
+    // If consecutive months, show range
+    if (months.length > 1 && 
+        months.every((val, i, arr) => i === 0 || val === arr[i - 1] + 1)) {
+      return `${monthNames[months[0] - 1]}-${monthNames[months[months.length - 1] - 1]}`;
+    }
+    
+    return formattedMonths.join(', ');
+  };
+
+  useEffect(() => {
+    // Changed to use the correct function name
+    fetchPerenualPlantData();
+    fetchNutritionData();
+  }, []);
 
   const toggleInfoBox = () => {
     const toValue = isInfoExpanded ? MIN_INFO_HEIGHT : MAX_INFO_HEIGHT;
@@ -405,12 +448,12 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* Pulsante Indietro */}
+      {/* Back Button */}
       <TouchableOpacity 
         style={styles.backButton}
         onPress={handleBackPress}
       >
-        <Text style={styles.backButtonText}>← Indietro</Text>
+        <Text style={styles.backButtonText}>← Back</Text>
       </TouchableOpacity>
 
       {showInfo && (
@@ -428,12 +471,12 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
               onPress={toggleInfoBox}
               activeOpacity={0.7}
             >
-               <View style={styles.arrowContainer}>
-                           <View style={[
-                             styles.arrow,
-                             { transform: [{ rotate: isInfoExpanded ? '180deg' : '0deg' }] }
-                           ]} />
-                         </View>
+              <View style={styles.arrowContainer}>
+                <View style={[
+                  styles.arrow,
+                  { transform: [{ rotate: isInfoExpanded ? '180deg' : '0deg' }] }
+                ]} />
+              </View>
             </TouchableOpacity>
   
             <ScrollView style={styles.scrollContent}>
@@ -442,47 +485,76 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
               ) : error ? (
                 <Text style={styles.errorText}>{error}</Text>
               ) : (
-                farmData && (
+                plantData && (
                   <View style={styles.infoSection}>
                     <View style={styles.headerContainer}>
-                      <Text style={styles.mainTitle}>Pomodoro</Text>
-                      <Text style={styles.scientificName}>{farmData.scientificName}</Text>
+                      <Text style={styles.mainTitle}>{plantData.name}</Text>
+                      <Text style={styles.scientificName}>{plantData.scientificName}</Text>
+                      <Text style={styles.familyName}>Family: {plantData.family}</Text>
                     </View>
   
                     <View style={styles.cardContainer}>
                       <View style={styles.infoCard}>
-                        <Text style={styles.cardTitle}>Descrizione</Text>
-                        <Text style={styles.cardText}>{farmData.description}</Text>
+                        <Text style={styles.cardTitle}>Description</Text>
+                        <Text style={styles.cardText}>{plantData.description}</Text>
                       </View>
   
                       <View style={styles.infoCard}>
-                        <Text style={styles.cardTitle}>Requisiti di Coltivazione</Text>
+                        <Text style={styles.cardTitle}>Growing Requirements</Text>
                         <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>☀️ Esposizione:</Text>
-                          <Text style={styles.requirementValue}>{farmData.sunRequirements}</Text>
+                          <Text style={styles.requirementLabel}>☀️ Exposure:</Text>
+                          <Text style={styles.requirementValue}>{plantData.sunRequirements}</Text>
                         </View>
                         <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>🌱 Semina:</Text>
-                          <Text style={styles.requirementValue}>{farmData.sowingMethod}</Text>
+                          <Text style={styles.requirementLabel}>🌱 Growing period:</Text>
+                          <Text style={styles.requirementValue}>{plantData.growingMonths}</Text>
                         </View>
                         <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>📏 Altezza:</Text>
-                          <Text style={styles.requirementValue}>{farmData.height}</Text>
+                          <Text style={styles.requirementLabel}>🍅 Harvest period:</Text>
+                          <Text style={styles.requirementValue}>{plantData.harvestMonths}</Text>
                         </View>
                         <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>↔️ Spaziatura:</Text>
-                          <Text style={styles.requirementValue}>{farmData.rowSpacing}</Text>
+                          <Text style={styles.requirementLabel}>📏 Height:</Text>
+                          <Text style={styles.requirementValue}>{plantData.height}</Text>
                         </View>
-                      <View style={styles.requirementRow}>
-                        <Text style={styles.requirementLabel}>🌡️ Giorni di crescita:</Text>
-                        <Text style={styles.requirementValue}>{farmData.growingDegreeDays} giorni</Text>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>↔️ Width:</Text>
+                          <Text style={styles.requirementValue}>{plantData.spread}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🌱 Growth rate:</Text>
+                          <Text style={styles.requirementValue}>{plantData.growthRate}</Text>
+                        </View>
                       </View>
+                      
+                      <View style={styles.infoCard}>
+                        <Text style={styles.cardTitle}>Characteristics</Text>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🌸 Flower color:</Text>
+                          <Text style={styles.requirementValue}>{plantData.flowerColor}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🍅 Fruit color:</Text>
+                          <Text style={styles.requirementValue}>{plantData.fruitColor}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🌍 Soil:</Text>
+                          <Text style={styles.requirementValue}>{plantData.soilTexture}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>💧 Humidity:</Text>
+                          <Text style={styles.requirementValue}>{plantData.soilHumidity}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🍽️ Edible:</Text>
+                          <Text style={styles.requirementValue}>{plantData.edible ? 'Yes' : 'No'}</Text>
+                        </View>
                       </View>
   
                       {foodData && (
                         <View style={styles.infoCard}>
-                          <Text style={styles.cardTitle}>Valori Nutrizionali</Text>
-                          <Text style={styles.cardSubtitle}>per 100g di prodotto</Text>
+                          <Text style={styles.cardTitle}>Nutritional Values</Text>
+                          <Text style={styles.cardSubtitle}>per 100g of product</Text>
                           <View style={styles.nutrientGrid}>
                             <View style={styles.nutrientItem}>
                               <Text style={styles.nutrientValue}>{foodData.energy}</Text>
@@ -490,23 +562,23 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
                             </View>
                             <View style={styles.nutrientItem}>
                               <Text style={styles.nutrientValue}>{foodData.proteins}</Text>
-                              <Text style={styles.nutrientLabel}>Proteine</Text>
+                              <Text style={styles.nutrientLabel}>Proteins</Text>
                             </View>
                             <View style={styles.nutrientItem}>
                               <Text style={styles.nutrientValue}>{foodData.carbohydrates}</Text>
-                              <Text style={styles.nutrientLabel}>Carboidrati</Text>
+                              <Text style={styles.nutrientLabel}>Carbs</Text>
                             </View>
                             <View style={styles.nutrientItem}>
                               <Text style={styles.nutrientValue}>{foodData.fat}</Text>
-                              <Text style={styles.nutrientLabel}>Grassi</Text>
+                              <Text style={styles.nutrientLabel}>Fat</Text>
                             </View>
                             <View style={styles.nutrientItem}>
                               <Text style={styles.nutrientValue}>{foodData.fiber}</Text>
-                              <Text style={styles.nutrientLabel}>Fibre</Text>
+                              <Text style={styles.nutrientLabel}>Fiber</Text>
                             </View>
                             <View style={styles.nutrientItem}>
                               <Text style={styles.nutrientValue}>{foodData.vitaminC}</Text>
-                              <Text style={styles.nutrientLabel}>Vitamina C</Text>
+                              <Text style={styles.nutrientLabel}>Vitamin C</Text>
                             </View>
                           </View>
                         </View>
@@ -521,7 +593,6 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
       )}
     </View>
   );
-
 };
 
 const styles = StyleSheet.create({
@@ -654,106 +725,82 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontStyle: 'italic',
     color: '#558B2F',
+    marginBottom: 5,
+  },
+  familyName: {
+    fontSize: 16,
+    color: '#7CB342',
   },
   cardContainer: {
     gap: 15,
   },
   infoCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 15,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
+    marginBottom: 5,
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#2E7D32',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#388E3C',
     marginBottom: 10,
   },
   cardSubtitle: {
     fontSize: 14,
-    color: '#689F38',
-    marginBottom: 15,
+    color: '#757575',
+    marginBottom: 10,
     fontStyle: 'italic',
   },
   cardText: {
-    fontSize: 16,
-    color: '#333',
-    lineHeight: 24,
+    fontSize: 15,
+    color: '#333333',
+    lineHeight: 22,
   },
   requirementRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8F5E9',
+    borderBottomColor: '#E0E0E0',
   },
   requirementLabel: {
-    fontSize: 16,
-    color: '#33691E',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#555555',
+    flex: 1,
   },
   requirementValue: {
-    fontSize: 16,
-    color: '#424242',
+    fontSize: 14,
+    color: '#333333',
     flex: 1,
-    textAlign: 'right',
-    marginLeft: 10,
+    fontWeight: '500',
   },
   nutrientGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 15,
+    marginTop: 10,
   },
   nutrientItem: {
     width: '30%',
     alignItems: 'center',
-    backgroundColor: '#F1F8E9',
-    padding: 10,
-    borderRadius: 8,
+    marginBottom: 15,
   },
   nutrientValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 4,
+    color: '#4CAF50',
   },
   nutrientLabel: {
-    fontSize: 14,
-    color: '#558B2F',
-    textAlign: 'center',
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 3,
   },
-  infoContainer: {
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 15,
-    paddingTop: 10,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  scrollContent: {
-    marginTop: 10,
-  },
-  expandButton: {
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  expandIcon: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-  }, 
   arrowContainer: {
     width: 40,
     height: 20,
@@ -767,11 +814,21 @@ const styles = StyleSheet.create({
     borderStyle: 'solid',
     borderLeftWidth: 8,
     borderRightWidth: 8,
-    borderBottomWidth: 12,
+    borderBottomWidth: 8,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderBottomColor: '#4CAF50',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#4CAF50',
+  }
 });
 
 export default TomatoScene;

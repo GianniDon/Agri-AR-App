@@ -35,31 +35,35 @@ const textureAssets = {
 };
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const API_KEY = 'sk-C90467d027a42b3829089'; // Note: This should be a complete Perenual API key
+const query = "carrot";
+
 
 const CarrotScene = ({ showAR, onStopAR, navigation }) => {
   // States
-  const [isModelLoaded, setIsModelLoaded] = useState(false);
-  const [error, setError] = useState(null);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [foodData, setFoodData] = useState(null);
-  const [farmData, setFarmData] = useState(null);
-  const [showInfo, setShowInfo] = useState(true);
-  const [isInfoExpanded, setIsInfoExpanded] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Refs
-  const sceneRef = useRef(null);
-  const cameraRef = useRef(null);
-  const rendererRef = useRef(null);
-  const modelRef = useRef(null);
-  const animationFrameId = useRef(null);
-  const lastTouch = useRef(new Vector2());
-  const lastDistance = useRef(0);
-  const initialZoom = useRef(10);
-  const infoBoxHeight = useRef(new Animated.Value(150)).current;
-
-  const MIN_INFO_HEIGHT = 150;
-  const MAX_INFO_HEIGHT = SCREEN_HEIGHT * 0.6;
+   const [isModelLoaded, setIsModelLoaded] = useState(false);
+    const [error, setError] = useState(null);
+    const [loadingProgress, setLoadingProgress] = useState(0);
+    const [foodData, setFoodData] = useState(null);
+    const [plantData, setPlantData] = useState(null);
+    const [showInfo, setShowInfo] = useState(true);
+    const [isInfoExpanded, setIsInfoExpanded] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+  
+    // Refs
+    const sceneRef = useRef(null);
+    const cameraRef = useRef(null);
+    const rendererRef = useRef(null);
+    const modelRef = useRef(null);
+    const animationFrameId = useRef(null);
+    const lastTouch = useRef(new Vector2());
+    const lastDistance = useRef(0);
+    const initialZoom = useRef(10);
+    const infoBoxHeight = useRef(new Animated.Value(150)).current;
+  
+    const MIN_INFO_HEIGHT = 150;
+    const MAX_INFO_HEIGHT = SCREEN_HEIGHT * 0.6;
+  
 
   const panResponder = useRef(
     PanResponder.create({
@@ -233,6 +237,83 @@ const CarrotScene = ({ showAR, onStopAR, navigation }) => {
       setError(`Error initializing AR scene: ${e.message}`);
     }
   };
+  const fetchPlantData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Search for tomato plant
+      const searchResponse = await fetch(
+        `https://perenual.com/api/species-list?key=${API_KEY}&q=${query}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (!searchResponse.ok) {
+        throw new Error(`Error in Perenual search: ${searchResponse.status}`);
+      }
+      
+      const searchData = await searchResponse.json();
+      
+      if (!searchData.data || searchData.data.length === 0) {
+        throw new Error("No plants found on Perenual");
+      }
+      
+      // Get the first result which is likely Solanum lycopersicum (tomato)
+      const plantId = searchData.data[0].id;
+      
+      // Get detailed plant information using the ID
+      const detailResponse = await fetch(
+        `https://perenual.com/api/species/details/${plantId}?key=${API_KEY}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (!detailResponse.ok) {
+        throw new Error(`Error retrieving plant details: ${detailResponse.status}`);
+      }
+      
+      const plant = await detailResponse.json();
+      
+      // Structure data for UI
+      setPlantData({
+        name: plant.common_name || 'Tomato',
+        scientificName: plant.scientific_name || 'N/A',
+        family: plant.family || 'N/A',
+        description: plant.description || "N/A",
+        sunRequirements: formatPlantProperties(plant.sunlight) || 'N/A',
+        height: formatPlantProperties(plant.dimensions?.height) || 'N/A',
+        spread: formatPlantProperties(plant.dimensions?.width) || 'N/A',
+        growingMonths: "N/A",
+        harvestMonths: "N/A",
+        soilTexture: "N/A",
+        soilHumidity: "N/A",
+        growthRate: plant.growth_rate || 'N/A',
+        flowerColor: formatPlantProperties(plant.flowers?.color) || 'N/A',
+        fruitColor: 'N/A',
+        edible: plant.edible || true,
+        vegetable: true,
+        imgUrl: plant.default_image?.regular_url || null
+      });
+      
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error retrieving data from Perenual:', error);
+     
+      setError("Unable to retrieve data from Perenual, showing alternative data");
+      setIsLoading(false);
+    }
+  };
+
 
 
   const fetchNutritionData = async () => {
@@ -272,53 +353,46 @@ const CarrotScene = ({ showAR, onStopAR, navigation }) => {
     fetchNutritionData();
   }, []);
 
-  const fetchPlantData = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(
-        `https://openfarm.cc/api/v1/crops?filter=carrot`,
-        {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      if (!response.ok) {
-        throw new Error('Errore nel recupero dei dati di coltivazione');
-      }
-      
-      const data = await response.json();
-      console.log('Attributi della pianta:', data.data[0].attributes);
-      
-      if (data.data.length === 0) {
-        throw new Error("Nessuna informazione trovata su OpenFarm");
-      }
-
-      const plantData = data.data[0].attributes;
-      
-      setFarmData({
-        name: plantData.name || 'Non disponibile',
-        scientificName: plantData.binomial_name || 'Non disponibile',
-        description: plantData.description || 'Non disponibile',
-        sunRequirements: plantData.sun_requirements || 'Non specificato',
-        sowingMethod: plantData.sowing_method || 'Non specificato',
-        height: `${plantData.height || 'N/A'} cm`,
-        spread: `${plantData.spread || 'N/A'} cm`,
-        rowSpacing: `${plantData.row_spacing || 'N/A'} cm`,
-        growingDegreeDays: plantData.growing_degree_days || 'Non specificato',
-        tags: plantData.tags_array?.join(', ') || 'Nessun tag',
-        commonNames: plantData.common_names?.join(', ') || 'Non disponibile'
-      });
-      
-      setIsLoading(false);
-    } catch (error) {
-      setError(error.message);
-      setIsLoading(false);
+  
+  const formatPlantProperties = (property) => {
+    if (!property) return null;
+    
+    if (Array.isArray(property)) {
+      return property.join(', ');
     }
+    
+    return property.toString();
   };
+  const formatGrowingMonths = (months) => {
+    if (!months || !Array.isArray(months) || months.length === 0) return null;
+    
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    
+    // Convert month numbers to names
+    const formattedMonths = months.map(m => monthNames[m - 1]);
+    
+    // If consecutive months, show range
+    if (months.length > 1 && 
+        months.every((val, i, arr) => i === 0 || val === arr[i - 1] + 1)) {
+      return `${monthNames[months[0] - 1]}-${monthNames[months[months.length - 1] - 1]}`;
+    }
+    
+    return formattedMonths.join(', ');
+  };
+  
+
+   const toggleInfoBox = () => {
+      const toValue = isInfoExpanded ? MIN_INFO_HEIGHT : MAX_INFO_HEIGHT;
+      Animated.spring(infoBoxHeight, {
+        toValue,
+        useNativeDriver: false,
+        friction: 10,
+      }).start();
+      setIsInfoExpanded(!isInfoExpanded);
+    };
 
   const mapSunRequirements = (light) => {
     const lightMap = {
@@ -332,134 +406,155 @@ const CarrotScene = ({ showAR, onStopAR, navigation }) => {
 
 
 
-  const toggleInfoBox = () => {
-    const toValue = isInfoExpanded ? MIN_INFO_HEIGHT : MAX_INFO_HEIGHT;
-    Animated.spring(infoBoxHeight, {
-      toValue,
-      useNativeDriver: false,
-      friction: 10,
-    }).start();
-    setIsInfoExpanded(!isInfoExpanded);
-  };
+  
 
   return (
-    <View style={styles.container}>
-
-
-<TouchableOpacity 
-        style={styles.backButton}
-        onPress={handleBackPress}
-      >
-        <Text style={styles.backButtonText}>← Indietro</Text>
-      </TouchableOpacity>
-      {showInfo && (
-        <>
-          <View
-            style={[styles.glContainer, { height: isInfoExpanded ? '40%' : '60%' }]}
-            {...panResponder.panHandlers}
-          >
-            <GLView style={styles.glView} onContextCreate={onContextCreate} />
-          </View>
+      <View style={styles.container}>
+        {/* Back Button */}
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={handleBackPress}
+        >
+          <Text style={styles.backButtonText}>← Back</Text>
+        </TouchableOpacity>
   
-          <Animated.View style={[styles.infoContainer, { height: infoBoxHeight }]}>
-            <TouchableOpacity 
-              style={styles.expandButton} 
-              onPress={toggleInfoBox}
-              activeOpacity={0.7}
+        {showInfo && (
+          <>
+            <View
+              style={[styles.glContainer, { height: isInfoExpanded ? '40%' : '60%' }]}
+              {...panResponder.panHandlers}
             >
-               <View style={styles.arrowContainer}>
-                           <View style={[
-                             styles.arrow,
-                             { transform: [{ rotate: isInfoExpanded ? '180deg' : '0deg' }] }
-                           ]} />
-                         </View>
-            </TouchableOpacity>
-  
-            <ScrollView style={styles.scrollContent}>
-              {isLoading ? (
-                <ActivityIndicator size="large" color="#4CAF50" />
-              ) : error ? (
-                <Text style={styles.errorText}>{error}</Text>
-              ) : (
-                farmData && (
-                  <View style={styles.infoSection}>
-                    <View style={styles.headerContainer}>
-                      <Text style={styles.mainTitle}>Carota</Text>
-                      <Text style={styles.scientificName}>{farmData.scientificName}</Text>
-                    </View>
-  
-                    <View style={styles.cardContainer}>
-                      <View style={styles.infoCard}>
-                        <Text style={styles.cardTitle}>Descrizione</Text>
-                        <Text style={styles.cardText}>{farmData.description}</Text>
+              <GLView style={styles.glView} onContextCreate={onContextCreate} />
+            </View>
+    
+            <Animated.View style={[styles.infoContainer, { height: infoBoxHeight }]}>
+              <TouchableOpacity 
+                style={styles.expandButton} 
+                onPress={toggleInfoBox}
+                activeOpacity={0.7}
+              >
+                <View style={styles.arrowContainer}>
+                  <View style={[
+                    styles.arrow,
+                    { transform: [{ rotate: isInfoExpanded ? '180deg' : '0deg' }] }
+                  ]} />
+                </View>
+              </TouchableOpacity>
+    
+              <ScrollView style={styles.scrollContent}>
+                {isLoading ? (
+                  <ActivityIndicator size="large" color="#4CAF50" />
+                ) : error ? (
+                  <Text style={styles.errorText}>{error}</Text>
+                ) : (
+                  plantData && (
+                    <View style={styles.infoSection}>
+                      <View style={styles.headerContainer}>
+                        <Text style={styles.mainTitle}>{plantData.name}</Text>
+                        <Text style={styles.scientificName}>{plantData.scientificName}</Text>
+                        <Text style={styles.familyName}>Family: {plantData.family}</Text>
                       </View>
-  
-                      <View style={styles.infoCard}>
-                        <Text style={styles.cardTitle}>Requisiti di Coltivazione</Text>
-                        <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>☀️ Esposizione:</Text>
-                          <Text style={styles.requirementValue}>{farmData.sunRequirements}</Text>
-                        </View>
-                        <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>🌱 Semina:</Text>
-                          <Text style={styles.requirementValue}>{farmData.sowingMethod}</Text>
-                        </View>
-                        <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>📏 Altezza:</Text>
-                          <Text style={styles.requirementValue}>{farmData.height}</Text>
-                        </View>
-                        <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>↔️ Spaziatura:</Text>
-                          <Text style={styles.requirementValue}>{farmData.rowSpacing}</Text>
-                        </View>
-                      <View style={styles.requirementRow}>
-                        <Text style={styles.requirementLabel}>🌡️ Giorni di crescita:</Text>
-                        <Text style={styles.requirementValue}>{farmData.growingDegreeDays} giorni</Text>
-                      </View>
-                      </View>
-  
-                      {foodData && (
+    
+                      <View style={styles.cardContainer}>
                         <View style={styles.infoCard}>
-                          <Text style={styles.cardTitle}>Valori Nutrizionali</Text>
-                          <Text style={styles.cardSubtitle}>per 100g di prodotto</Text>
-                          <View style={styles.nutrientGrid}>
-                            <View style={styles.nutrientItem}>
-                              <Text style={styles.nutrientValue}>{foodData.energy}</Text>
-                              <Text style={styles.nutrientLabel}>kcal</Text>
-                            </View>
-                            <View style={styles.nutrientItem}>
-                              <Text style={styles.nutrientValue}>{foodData.proteins}</Text>
-                              <Text style={styles.nutrientLabel}>Proteine</Text>
-                            </View>
-                            <View style={styles.nutrientItem}>
-                              <Text style={styles.nutrientValue}>{foodData.carbohydrates}</Text>
-                              <Text style={styles.nutrientLabel}>Carboidrati</Text>
-                            </View>
-                            <View style={styles.nutrientItem}>
-                              <Text style={styles.nutrientValue}>{foodData.fat}</Text>
-                              <Text style={styles.nutrientLabel}>Grassi</Text>
-                            </View>
-                            <View style={styles.nutrientItem}>
-                              <Text style={styles.nutrientValue}>{foodData.fiber}</Text>
-                              <Text style={styles.nutrientLabel}>Fibre</Text>
-                            </View>
-                            <View style={styles.nutrientItem}>
-                              <Text style={styles.nutrientValue}>{foodData.vitaminC}</Text>
-                              <Text style={styles.nutrientLabel}>Vitamina C</Text>
-                            </View>
+                          <Text style={styles.cardTitle}>Description</Text>
+                          <Text style={styles.cardText}>{plantData.description}</Text>
+                        </View>
+    
+                        <View style={styles.infoCard}>
+                          <Text style={styles.cardTitle}>Growing Requirements</Text>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>☀️ Exposure:</Text>
+                            <Text style={styles.requirementValue}>{plantData.sunRequirements}</Text>
+                          </View>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>🌱 Growing period:</Text>
+                            <Text style={styles.requirementValue}>{plantData.growingMonths}</Text>
+                          </View>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>🍅 Harvest period:</Text>
+                            <Text style={styles.requirementValue}>{plantData.harvestMonths}</Text>
+                          </View>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>📏 Height:</Text>
+                            <Text style={styles.requirementValue}>{plantData.height}</Text>
+                          </View>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>↔️ Width:</Text>
+                            <Text style={styles.requirementValue}>{plantData.spread}</Text>
+                          </View>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>🌱 Growth rate:</Text>
+                            <Text style={styles.requirementValue}>{plantData.growthRate}</Text>
                           </View>
                         </View>
-                      )}
+                        
+                        <View style={styles.infoCard}>
+                          <Text style={styles.cardTitle}>Characteristics</Text>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>🌸 Flower color:</Text>
+                            <Text style={styles.requirementValue}>{plantData.flowerColor}</Text>
+                          </View>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>🍅 Fruit color:</Text>
+                            <Text style={styles.requirementValue}>{plantData.fruitColor}</Text>
+                          </View>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>🌍 Soil:</Text>
+                            <Text style={styles.requirementValue}>{plantData.soilTexture}</Text>
+                          </View>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>💧 Humidity:</Text>
+                            <Text style={styles.requirementValue}>{plantData.soilHumidity}</Text>
+                          </View>
+                          <View style={styles.requirementRow}>
+                            <Text style={styles.requirementLabel}>🍽️ Edible:</Text>
+                            <Text style={styles.requirementValue}>{plantData.edible ? 'Yes' : 'No'}</Text>
+                          </View>
+                        </View>
+    
+                        {foodData && (
+                          <View style={styles.infoCard}>
+                            <Text style={styles.cardTitle}>Nutritional Values</Text>
+                            <Text style={styles.cardSubtitle}>per 100g of product</Text>
+                            <View style={styles.nutrientGrid}>
+                              <View style={styles.nutrientItem}>
+                                <Text style={styles.nutrientValue}>{foodData.energy}</Text>
+                                <Text style={styles.nutrientLabel}>kcal</Text>
+                              </View>
+                              <View style={styles.nutrientItem}>
+                                <Text style={styles.nutrientValue}>{foodData.proteins}</Text>
+                                <Text style={styles.nutrientLabel}>Proteins</Text>
+                              </View>
+                              <View style={styles.nutrientItem}>
+                                <Text style={styles.nutrientValue}>{foodData.carbohydrates}</Text>
+                                <Text style={styles.nutrientLabel}>Carbs</Text>
+                              </View>
+                              <View style={styles.nutrientItem}>
+                                <Text style={styles.nutrientValue}>{foodData.fat}</Text>
+                                <Text style={styles.nutrientLabel}>Fat</Text>
+                              </View>
+                              <View style={styles.nutrientItem}>
+                                <Text style={styles.nutrientValue}>{foodData.fiber}</Text>
+                                <Text style={styles.nutrientLabel}>Fiber</Text>
+                              </View>
+                              <View style={styles.nutrientItem}>
+                                <Text style={styles.nutrientValue}>{foodData.vitaminC}</Text>
+                                <Text style={styles.nutrientLabel}>Vitamin C</Text>
+                              </View>
+                            </View>
+                          </View>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                )
-              )}
-            </ScrollView>
-          </Animated.View>
-        </>
-      )}
-    </View>
-  );
+                  )
+                )}
+              </ScrollView>
+            </Animated.View>
+          </>
+        )}
+      </View>
+    );
 
 };
 
@@ -467,6 +562,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 40,
+    left: 15,
+    backgroundColor: 'rgba(76, 175, 80, 0.9)',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    zIndex: 10,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  backButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   glContainer: {
     flex: 1,
@@ -570,106 +688,83 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontStyle: 'italic',
     color: '#558B2F',
+    marginBottom: 5,
+  },
+  familyName: {
+    fontSize: 16,
+    color: '#7CB342',
   },
   cardContainer: {
     gap: 15,
   },
   infoCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 15,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
+    marginBottom: 5,
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#2E7D32',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#388E3C',
     marginBottom: 10,
   },
   cardSubtitle: {
     fontSize: 14,
-    color: '#689F38',
-    marginBottom: 15,
+    color: '#757575',
+    marginBottom: 10,
     fontStyle: 'italic',
   },
   cardText: {
-    fontSize: 16,
-    color: '#333',
-    lineHeight: 24,
+    fontSize: 15,
+    color: '#333333',
+    lineHeight: 22,
   },
   requirementRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8F5E9',
+    borderBottomColor: '#E0E0E0',
   },
   requirementLabel: {
-    fontSize: 16,
-    color: '#33691E',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#555555',
+    flex: 1,
   },
   requirementValue: {
-    fontSize: 16,
-    color: '#424242',
+    fontSize: 14,
+    color: '#333333',
     flex: 1,
-    textAlign: 'right',
-    marginLeft: 10,
+    fontWeight: '500',
   },
   nutrientGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 15,
+    marginTop: 10,
   },
   nutrientItem: {
     width: '30%',
     alignItems: 'center',
-    backgroundColor: '#F1F8E9',
-    padding: 10,
-    borderRadius: 8,
+    marginBottom: 15,
   },
   nutrientValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 4,
+    color: '#4CAF50',
   },
   nutrientLabel: {
-    fontSize: 14,
-    color: '#558B2F',
-    textAlign: 'center',
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 3,
   },
-  infoContainer: {
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 15,
-    paddingTop: 10,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  scrollContent: {
-    marginTop: 10,
-  },
-  expandButton: {
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  expandIcon: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-  }, arrowContainer: {
+  arrowContainer: {
     width: 40,
     height: 20,
     justifyContent: 'center',
@@ -682,34 +777,21 @@ const styles = StyleSheet.create({
     borderStyle: 'solid',
     borderLeftWidth: 8,
     borderRightWidth: 8,
-    borderBottomWidth: 12,
+    borderBottomWidth: 8,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderBottomColor: '#4CAF50',
   },
-  backButton: {
-    position: 'absolute',
-    top: 40,
-    left: 15,
-    backgroundColor: 'rgba(76, 175, 80, 0.9)',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-    zIndex: 10,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  backButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+  progressText: {
+    marginTop: 10,
     fontSize: 16,
-  },
+    color: '#4CAF50',
+  }
 });
 
 
