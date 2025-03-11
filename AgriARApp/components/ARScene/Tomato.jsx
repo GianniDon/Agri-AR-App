@@ -29,7 +29,7 @@ import * as FileSystem from 'expo-file-system';
 
 const MODEL_ID = 'tomato-plant';
 // Using the API token from the original code (though it appears to be incomplete)
-const API_KEY = 'sk-C90467d027a42b3829089'; // Note: This should be a complete Perenual API key
+const API_KEY = 'sk-ItsJ67d05e1252f1e9092'; // Note: This should be a complete Perenual API key
 const query = "tomato";
 
 const modelAsset = Asset.fromModule(require('../../assets/models/source/tomato-plant.obj'));
@@ -282,7 +282,7 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
       }
       
       const data = await response.json();
-      
+      console.log('Nutrition data:', data);
       if (data.status === 1) {
         const nutriments = data.product.nutriments;
         setFoodData({
@@ -306,8 +306,9 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
   const fetchPerenualPlantData = async () => {
     try {
       setIsLoading(true);
+      console.log("Avvio fetch dati pianta per query:", query);
       
-      // Search for tomato plant
+      // Ricerca pianta
       const searchResponse = await fetch(
         `https://perenual.com/api/species-list?key=${API_KEY}&q=${query}`,
         {
@@ -324,15 +325,17 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
       }
       
       const searchData = await searchResponse.json();
+      console.log("Risultati ricerca:", searchData);
       
       if (!searchData.data || searchData.data.length === 0) {
         throw new Error("No plants found on Perenual");
       }
       
-      // Get the first result which is likely Solanum lycopersicum (tomato)
+      // Ottieni il primo risultato
       const plantId = searchData.data[0].id;
+      console.log(`ID pianta selezionata: ${plantId}`);
       
-      // Get detailed plant information using the ID
+      // Ottieni informazioni dettagliate della pianta usando l'ID
       const detailResponse = await fetch(
         `https://perenual.com/api/species/details/${plantId}?key=${API_KEY}`,
         {
@@ -349,56 +352,45 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
       }
       
       const plant = await detailResponse.json();
+      console.log("Dati dettagliati pianta:", plant);
       
-      // Structure data for UI
+      // Gestisci scientificName che potrebbe essere un array
+      const scientificName = Array.isArray(plant.scientific_name)
+        ? plant.scientific_name.join(', ')
+        : plant.scientific_name || 'Solanum lycopersicum';
+      
       setPlantData({
         name: plant.common_name || 'Tomato',
-        scientificName: plant.scientific_name || 'Solanum lycopersicum',
+        scientificName: scientificName,
         family: plant.family || 'Solanaceae',
         description: plant.description || "The tomato is an annual plant of the Solanaceae family, native to Central America. It's one of the most widely cultivated plants for its edible fruits rich in vitamin C and antioxidants.",
-        sunRequirements: formatPlantProperties(plant.sunlight) || 'Full sun',
-        height: formatPlantProperties(plant.dimensions?.height) || '100-300 cm',
-        spread: formatPlantProperties(plant.dimensions?.width) || '45-80 cm',
-        growingMonths: "April-September",
-        harvestMonths: "July-September",
-        soilTexture: "Well-drained, rich in organic matter",
-        soilHumidity: "Medium humidity",
+        sunRequirements: Array.isArray(plant.sunlight) ? plant.sunlight.join(', ') : 'Full sun',
+        height: plant.dimension || '100-300 cm',
         growthRate: plant.growth_rate || 'Rapid',
-        flowerColor: formatPlantProperties(plant.flowers?.color) || 'Yellow',
-        fruitColor: 'Red (various shades depending on variety)',
-        edible: plant.edible || true,
-        vegetable: true,
+        cycle: plant.cycle || 'Annual',
+        maintenance: plant.maintenance || 'Moderate',
+        wateringNeeds: plant.watering || 'Average',
+        flowerColor: plant.flower_color || 'Yellow',
+        fruitColor: Array.isArray(plant.fruit_color) ? plant.fruit_color.join(', ') : 'Red',
+        edibleFruit: plant.edible_fruit || false,
+        edibleLeaf: plant.edible_leaf || false,
+        medicinal: plant.medicinal || false,
+        origin: Array.isArray(plant.origin) ? plant.origin.join(', ') : '',
+        pruningMonths: Array.isArray(plant.pruning_month) ? plant.pruning_month.join(', ') : '',
+        hardiness: plant.hardiness ? `${plant.hardiness.min} - ${plant.hardiness.max}` : '',
+        propagation: Array.isArray(plant.propagation) ? plant.propagation.join(', ') : '',
         imgUrl: plant.default_image?.regular_url || null
       });
       
+      console.log("Dati strutturati finali:", plantData);
       setIsLoading(false);
+      
     } catch (error) {
       console.error('Error retrieving data from Perenual:', error);
-      // Fallback static data in case of error
-      setPlantData({
-        name: 'Tomato',
-        scientificName: 'Solanum lycopersicum',
-        family: 'Solanaceae',
-        description: "The tomato is an annual plant of the Solanaceae family, native to Central America. It's one of the most widely cultivated plants for its edible fruits rich in vitamin C and antioxidants.",
-        sunRequirements: 'Full sun',
-        height: '100-300 cm',
-        spread: '45-80 cm',
-        growingMonths: 'April-September',
-        harvestMonths: 'July-September',
-        soilTexture: 'Well-drained, rich in organic matter',
-        soilHumidity: 'Medium humidity',
-        growthRate: 'Rapid',
-        flowerColor: 'Yellow',
-        fruitColor: 'Red (various shades depending on variety)',
-        edible: true,
-        vegetable: true,
-        imgUrl: null
-      });
       setError("Unable to retrieve data from Perenual, showing alternative data");
       setIsLoading(false);
     }
   };
-
   // Utility functions for formatting Perenual data
   const formatPlantProperties = (property) => {
     if (!property) return null;
@@ -455,7 +447,7 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
       >
         <Text style={styles.backButtonText}>← Back</Text>
       </TouchableOpacity>
-
+  
       {showInfo && (
         <>
           <View
@@ -506,24 +498,24 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
                           <Text style={styles.requirementValue}>{plantData.sunRequirements}</Text>
                         </View>
                         <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>🌱 Growing period:</Text>
-                          <Text style={styles.requirementValue}>{plantData.growingMonths}</Text>
-                        </View>
-                        <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>🍅 Harvest period:</Text>
-                          <Text style={styles.requirementValue}>{plantData.harvestMonths}</Text>
-                        </View>
-                        <View style={styles.requirementRow}>
                           <Text style={styles.requirementLabel}>📏 Height:</Text>
                           <Text style={styles.requirementValue}>{plantData.height}</Text>
                         </View>
                         <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>↔️ Width:</Text>
-                          <Text style={styles.requirementValue}>{plantData.spread}</Text>
-                        </View>
-                        <View style={styles.requirementRow}>
                           <Text style={styles.requirementLabel}>🌱 Growth rate:</Text>
                           <Text style={styles.requirementValue}>{plantData.growthRate}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🔄 Life cycle:</Text>
+                          <Text style={styles.requirementValue}>{plantData.cycle}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🌡️ Hardiness:</Text>
+                          <Text style={styles.requirementValue}>{plantData.hardiness}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🌱 Propagation:</Text>
+                          <Text style={styles.requirementValue}>{plantData.propagation}</Text>
                         </View>
                       </View>
                       
@@ -538,16 +530,36 @@ const TomatoScene = ({ showAR, onStopAR, navigation }) => {
                           <Text style={styles.requirementValue}>{plantData.fruitColor}</Text>
                         </View>
                         <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>🌍 Soil:</Text>
-                          <Text style={styles.requirementValue}>{plantData.soilTexture}</Text>
+                          <Text style={styles.requirementLabel}>💧 Watering:</Text>
+                          <Text style={styles.requirementValue}>{plantData.wateringNeeds}</Text>
                         </View>
                         <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>💧 Humidity:</Text>
-                          <Text style={styles.requirementValue}>{plantData.soilHumidity}</Text>
+                          <Text style={styles.requirementLabel}>✂️ Maintenance:</Text>
+                          <Text style={styles.requirementValue}>{plantData.maintenance}</Text>
                         </View>
                         <View style={styles.requirementRow}>
-                          <Text style={styles.requirementLabel}>🍽️ Edible:</Text>
-                          <Text style={styles.requirementValue}>{plantData.edible ? 'Yes' : 'No'}</Text>
+                          <Text style={styles.requirementLabel}>✂️ Pruning months:</Text>
+                          <Text style={styles.requirementValue}>{plantData.pruningMonths}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🌍 Origin:</Text>
+                          <Text style={styles.requirementValue}>{plantData.origin}</Text>
+                        </View>
+                      </View>
+  
+                      <View style={styles.infoCard}>
+                        <Text style={styles.cardTitle}>Uses</Text>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🍽️ Edible fruit:</Text>
+                          <Text style={styles.requirementValue}>{plantData.edibleFruit ? 'Yes' : 'No'}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>🥬 Edible leaves:</Text>
+                          <Text style={styles.requirementValue}>{plantData.edibleLeaf ? 'Yes' : 'No'}</Text>
+                        </View>
+                        <View style={styles.requirementRow}>
+                          <Text style={styles.requirementLabel}>💊 Medicinal:</Text>
+                          <Text style={styles.requirementValue}>{plantData.medicinal ? 'Yes' : 'No'}</Text>
                         </View>
                       </View>
   
